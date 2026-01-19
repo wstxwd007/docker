@@ -12,18 +12,19 @@ USER root
 ARG TARGETARCH
 
 RUN mkdir -p /var/lock && \
-    # 1. 修复源：针对 arm64 架构修正官方镜像硬编码的 x86 源
+    # 1. 架构源修复 (已验证成功)
     if [ "$TARGETARCH" = "arm64" ]; then \
         sed -i 's/x86\/64/armvirt\/64/g' /etc/opkg/distfeeds.conf && \
         sed -i 's/x86_64/aarch64_generic/g' /etc/opkg/distfeeds.conf; \
     fi && \
     \
     opkg update && \
-    # 2. 解决冲突：使用正确的强制删除参数 --force-remove
-    # 先尝试删除 wolfssl 库，防止与 openssl 版本冲突
-    opkg remove libustream-wolfssl* --force-remove || true && \
+    # 2. 暴力卸载 wolfssl：使用 --force-depends 忽略依赖警告，并删除冲突文件
+    opkg remove libustream-wolfssl* --force-remove --force-depends || true && \
+    # 强制清理可能冲突的软链接/文件（这是为了保险）
+    rm -f /lib/libustream-ssl.so || true && \
     \
-    # 3. 安装必要组件
+    # 3. 安装依赖：安装 openssl 版本的 ustream 以支持 HTTPS
     opkg install libustream-openssl ca-bundle ca-certificates kmod-tun wget || true && \
     rm -rf /var/opkg-lists
 
