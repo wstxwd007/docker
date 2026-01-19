@@ -8,16 +8,24 @@ ENV UU_LAN_DNS="119.29.29.29"
 
 USER root
 
-# 使用 TARGETARCH 自动识别架构 (amd64 或 arm64)
+# 显式声明架构变量
 ARG TARGETARCH
 
 RUN mkdir -p /var/lock && \
+    # 1. 修复源：将内置的 x86_64 路径替换为当前构建架构对应的路径
+    # 注意：OpenWrt ARM64 的架构名通常是 aarch64_generic
+    if [ "$TARGETARCH" = "arm64" ]; then \
+        sed -i 's/x86\/64/armvirt\/64/g' /etc/opkg/distfeeds.conf && \
+        sed -i 's/x86_64/aarch64_generic/g' /etc/opkg/distfeeds.conf; \
+    fi && \
+    \
     opkg update && \
+    # 2. 解决冲突：先卸载 wolfssl，再安装 openssl 相关包
+    opkg remove libustream-wolfssl20201210 --force-removal && \
     opkg install libustream-openssl ca-bundle ca-certificates kmod-tun wget || true && \
     rm -rf /var/opkg-lists
 
-# 动态下载/拷贝 gost
-# 技巧：如果是从本地 COPY，你需要准备好两个架构的压缩包
+# 3. 动态下载 GOST
 RUN wget https://github.com/go-gost/gost/releases/download/v3.2.6/gost_3.2.6_linux_${TARGETARCH}.tar.gz -O /tmp/gost.tar.gz && \
     tar -zxvf /tmp/gost.tar.gz -C /usr/bin/ gost && \
     chmod +x /usr/bin/gost && \
@@ -32,3 +40,4 @@ RUN chmod +x /etc/init.d/ux_prepare \
     && /etc/init.d/dropbear disable
 
 CMD ["/sbin/init"]
+
