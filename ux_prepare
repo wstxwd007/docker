@@ -1,0 +1,55 @@
+#!/bin/sh /etc/rc.common
+
+START=91
+
+start() {
+  # --- 原有网络配置部分：保持不变 ---
+  echo "config interface 'loopback'
+    option ifname 'lo'
+    option proto 'static'
+    option ipaddr '127.0.0.1'
+    option netmask '255.0.0.0'
+
+config interface 'lan'
+    option type 'bridge'
+    option ifname 'eth0'
+    option proto 'static'
+    option ipaddr '$UU_LAN_IPADDR'
+    option gateway '$UU_LAN_GATEWAY'
+    option netmask '$UU_LAN_NETMASK'
+    list dns '$UU_LAN_DNS'" > /etc/config/network
+  /etc/init.d/network restart
+
+  uci set dhcp.lan.ignore=1
+  uci commit dhcp
+  /etc/init.d/dnsmasq restart
+
+  # --- 优化后的安装与启动逻辑：从这里开始 ---
+
+  # 1. 启动 GOST v3 API (优先启动，不影响后续安装)
+  if [ -x "/usr/bin/gost" ]; then
+      /usr/bin/gost -api  :"$GOSTAPI" >/dev/null 2>&1 &
+  fi
+
+  # 2. 网易 UU：增加持久化检测
+  # 如果检测到 monitor 脚本已存在，说明已经安装过，直接运行；否则下载安装
+  if [ ! -f "/usr/sbin/uu/uuplugin_monitor.sh" ]; then
+      wget https://uurouter.gdl.netease.com/uuplugin-script/openwrt/v1/install.sh -O /root/uuinstall.sh
+      /bin/sh /root/uuinstall.sh openwrt $(uname -m)
+  else
+      /usr/sbin/uu/uuplugin_monitor.sh &
+  fi
+
+  # 3. 迅游：增加持久化检测
+  # 检测守护脚本是否存在，不存在则下载安装
+  if [ ! -f "/xunyou/xunyou_daemon.sh" ]; then
+      wget http://partnerdownload.xunyou.com/routerplugin/install.sh -O /root/xyinstall.sh
+      /bin/sh /root/xyinstall.sh openwrt $(uname -m)
+  else
+      # 迅游安装后通常通过守护脚本拉起
+      /bin/sh /xunyou/xunyou_daemon.sh simple &
+  fi
+}
+
+
+
