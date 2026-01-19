@@ -12,16 +12,18 @@ USER root
 ARG TARGETARCH
 
 RUN mkdir -p /var/lock && \
-    # 1. 修复源：将内置的 x86_64 路径替换为当前构建架构对应的路径
-    # 注意：OpenWrt ARM64 的架构名通常是 aarch64_generic
+    # 1. 修复源：针对 arm64 架构修正官方镜像硬编码的 x86 源
     if [ "$TARGETARCH" = "arm64" ]; then \
         sed -i 's/x86\/64/armvirt\/64/g' /etc/opkg/distfeeds.conf && \
         sed -i 's/x86_64/aarch64_generic/g' /etc/opkg/distfeeds.conf; \
     fi && \
     \
     opkg update && \
-    # 2. 解决冲突：先卸载 wolfssl，再安装 openssl 相关包
-    opkg remove libustream-wolfssl20201210 --force-removal && \
+    # 2. 解决冲突：使用正确的强制删除参数 --force-remove
+    # 先尝试删除 wolfssl 库，防止与 openssl 版本冲突
+    opkg remove libustream-wolfssl* --force-remove || true && \
+    \
+    # 3. 安装必要组件
     opkg install libustream-openssl ca-bundle ca-certificates kmod-tun wget || true && \
     rm -rf /var/opkg-lists
 
