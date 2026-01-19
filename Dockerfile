@@ -1,5 +1,4 @@
-ARG BASE_IMAGE=openwrt/rootfs:x86-generic-v21.02.5
-FROM ${BASE_IMAGE}
+FROM openwrt/rootfs:v21.02.5
 
 ENV GOSTAPI="18080"
 ENV UU_LAN_IPADDR=
@@ -9,24 +8,20 @@ ENV UU_LAN_DNS="119.29.29.29"
 
 USER root
 
-RUN mkdir -p /var/lock && \
-    echo 'src/gz openwrt_core https://downloads.openwrt.org/releases/21.02.5/targets/x86/64/packages' > /etc/opkg/distfeeds.conf && \
-    echo 'src/gz openwrt_base https://downloads.openwrt.org/releases/21.02.5/packages/x86_64/base' >> /etc/opkg/distfeeds.conf && \
-    echo 'src/gz openwrt_luci https://downloads.openwrt.org/releases/21.02.5/packages/x86_64/luci' >> /etc/opkg/distfeeds.conf && \
-    echo 'src/gz openwrt_packages https://downloads.openwrt.org/releases/21.02.5/packages/x86_64/packages' >> /etc/opkg/distfeeds.conf && \
-    echo 'src/gz openwrt_routing https://downloads.openwrt.org/releases/21.02.5/packages/x86_64/routing' >> /etc/opkg/distfeeds.conf && \
-    echo 'src/gz openwrt_telephony https://downloads.openwrt.org/releases/21.02.5/packages/x86_64/telephony' >> /etc/opkg/distfeeds.conf
+# 使用 TARGETARCH 自动识别架构 (amd64 或 arm64)
+ARG TARGETARCH
 
-RUN opkg update && \
-    if ! opkg list-installed | grep -q libustream-openssl; then opkg install libustream-openssl || true; fi && \
-    if ! opkg list-installed | grep -q ca-bundle; then opkg install ca-bundle || true; fi && \
-    if ! opkg list-installed | grep -q kmod-tun; then opkg install kmod-tun || true; fi && \
+RUN mkdir -p /var/lock && \
+    opkg update && \
+    opkg install libustream-openssl ca-bundle ca-certificates kmod-tun wget || true && \
     rm -rf /var/opkg-lists
 
-COPY gost_3.2.6_linux_amd64.tar.gz /tmp/
-RUN tar -zxvf /tmp/gost_3.2.6_linux_amd64.tar.gz -C /usr/bin/ gost \
-    && chmod +x /usr/bin/gost \
-    && rm /tmp/gost_3.2.6_linux_amd64.tar.gz
+# 动态下载/拷贝 gost
+# 技巧：如果是从本地 COPY，你需要准备好两个架构的压缩包
+RUN wget https://github.com/go-gost/gost/releases/download/v3.2.6/gost_3.2.6_linux_${TARGETARCH}.tar.gz -O /tmp/gost.tar.gz && \
+    tar -zxvf /tmp/gost.tar.gz -C /usr/bin/ gost && \
+    chmod +x /usr/bin/gost && \
+    rm /tmp/gost.tar.gz
 
 COPY ux_prepare /etc/init.d/ux_prepare
 RUN chmod +x /etc/init.d/ux_prepare \
